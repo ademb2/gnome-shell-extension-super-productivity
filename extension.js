@@ -1,4 +1,4 @@
-import GObject from 'gi://GObject'; // NEW: Required for subclassing UI elements
+import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -9,7 +9,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 const API_URL = 'http://127.0.0.1:3876';
-const POLL_INTERVAL = 3000;
+const POLL_INTERVAL_SECONDS = 3; // Updated to seconds for better battery efficiency
 
 function getTodayDateString() {
     const now = new Date();
@@ -32,11 +32,9 @@ function formatTimeSpent(ms) {
     return `${minutes}m`;
 }
 
-// 1. Create a properly registered GObject class for the Button
 const SuperProductivityButton = GObject.registerClass(
     class SuperProductivityButton extends PanelMenu.Button {
         _init() {
-            // Call the parent constructor: menu alignment, name, don't create menu
             super._init(0.0, 'Super Productivity', false);
 
             this._container = new St.BoxLayout({
@@ -60,7 +58,6 @@ const SuperProductivityButton = GObject.registerClass(
             this.add_child(this._container);
         }
 
-        // Helper method to keep your extension code clean
         updateDisplay(taskText, timeText) {
             this._taskLabel.set_text(taskText);
             this._timeLabel.set_text(timeText);
@@ -79,15 +76,17 @@ export default class SuperProductivityIndicator extends Extension {
         this._indicator = null;
         this._pollTimeout = null;
         this._httpSession = null;
+        
+        // NEW: Track network requests and reuse the decoder
+        this._cancellable = null; 
+        this._decoder = new TextDecoder('utf-8'); 
     }
 
     enable() {
         this._httpSession = new Soup.Session();
+        this._cancellable = new Gio.Cancellable(); // NEW: Initialize cancellable
 
-        // 2. Instantiate your newly registered class
         this._indicator = new SuperProductivityButton();
-
-        // This will now pass the instanceof check seamlessly
         Main.panel.addToStatusArea(this.uuid, this._indicator);
 
         this._startPolling();
@@ -97,6 +96,12 @@ export default class SuperProductivityIndicator extends Extension {
         if (this._pollTimeout) {
             GLib.source_remove(this._pollTimeout);
             this._pollTimeout = null;
+        }
+
+        // NEW: Cancel any in-flight network requests gracefully
+        if (this._cancellable) {
+            this._cancellable.cancel();
+            this._cancellable = null;
         }
 
         if (this._httpSession) {
@@ -112,7 +117,9 @@ export default class SuperProductivityIndicator extends Extension {
 
     _startPolling() {
         this._pollStatus();
-        this._pollTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, POLL_INTERVAL, () => {
+        
+        // NEW: Use timeout_add_seconds to coalesce CPU wake-ups
+        this._pollTimeout = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, POLL_INTERVAL_SECONDS, () => {
             this._pollStatus();
             return GLib.SOURCE_CONTINUE;
         });
@@ -126,7 +133,7 @@ export default class SuperProductivityIndicator extends Extension {
                 this._httpSession.send_and_read_async(
                     message,
                     GLib.PRIORITY_DEFAULT,
-                    null,
+                    this._cancellable, // NEW: Pass the cancellable instead of null
                     (session, result) => {
                         try {
                             const responseBytes = session.send_and_read_finish(result);
@@ -143,8 +150,8 @@ export default class SuperProductivityIndicator extends Extension {
                 return;
             }
 
-            const decoder = new TextDecoder('utf-8');
-            const responseText = decoder.decode(bytes.get_data());
+            // NEW: Use the reusable decoder instantiated in the constructor
+            const responseText = this._decoder.decode(bytes.get_data());
             const data = JSON.parse(responseText);
 
             if (data.ok && data.data.currentTask) {
@@ -152,13 +159,17 @@ export default class SuperProductivityIndicator extends Extension {
                 const today = getTodayDateString();
                 const todaySpent = task.timeSpentOnDay ? task.timeSpentOnDay[today] : 0;
 
-                // 3. Update using the helper method on the button class
                 this._indicator.updateDisplay(task.title || '', formatTimeSpent(todaySpent));
                 this._indicator.show();
             } else {
                 this._hideIndicator();
             }
         } catch (e) {
+            // NEW: Silently ignore cancellation errors if the extension was disabled mid-request
+            if (e.matches && e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) {
+                return;
+            }
+            
             this._hideIndicator();
         }
     }
