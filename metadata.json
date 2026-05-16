@@ -1,0 +1,16 @@
+{
+  "description": "The companion gnome shell extension for Super Productivity",
+  "name": "Super Productivity Indicator",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "url": "https://github.com/ademb2/gnome-shell-extension-super-productivity",
+  "uuid": "indicator@superproductivity.app",
+  "version": 3,
+  "gettext-domain": "super-productivity-indicator"
+}

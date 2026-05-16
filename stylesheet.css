@@ -1,0 +1,14 @@
+.spi-container {
+    padding: 0 8px;
+}
+
+.spi-task-label {
+    color: #ffffff;
+    font-size: 13px;
+}
+
+.spi-time-label {
+    color: #3584e4;
+    font-size: 13px;
+    margin-left: 6px;
+}
