@@ -3,12 +3,12 @@
 }
 
 .spi-task-label {
-    color: #ffffff;
-    font-size: 13px;
+    /* Removed color and font-size to inherit the exact GNOME system theme */
 }
 
 .spi-time-label {
-    color: #3584e4;
-    font-size: 13px;
-    margin-left: 6px;
+    /* Using GNOME's 'Blue 2' (#78aeed) or 'Blue 1' (#99c1f1) for much better dark mode contrast */
+    color: #78aeed; 
+    font-weight: bold; /* Bold makes the numbers instantly readable */
+    margin-left: 8px; /* Slightly more breathing room */
 }
