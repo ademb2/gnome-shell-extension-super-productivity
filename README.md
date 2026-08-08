@@ -13,11 +13,13 @@ A minimal GNOME Shell extension that displays your current task and time spent t
 
 ## Install
 
+1-Line Setup Command:
+
 ```bash
-git clone https://github.com/ademb2/gnome-shell-extension-super-productivity.git ~/.local/share/gnome-shell/extensions/indicator@superproductivity.app
+TOKEN="YOUR_TOKEN_HERE" && git clone https://github.com/ademb2/gnome-shell-extension-super-productivity.git ~/.local/share/gnome-shell/extensions/indicator@superproductivity.app && echo "$TOKEN" > ~/.local/share/gnome-shell/extensions/indicator@superproductivity.app/token.txt && gnome-extensions enable indicator@superproductivity.app
 ```
 
-Then enable via **Extensions**.
+This clones the extension, writes your Super Productivity REST API access token to `token.txt`, and enables the extension.
 
 ## Screenshot
 

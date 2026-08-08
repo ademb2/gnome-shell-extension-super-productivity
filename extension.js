@@ -80,11 +80,22 @@ export default class SuperProductivityIndicator extends Extension {
         // NEW: Track network requests and reuse the decoder
         this._cancellable = null; 
         this._decoder = new TextDecoder('utf-8'); 
+
+        // NEW: Cache the API token and re-read only when token.txt changes
+        this._cachedToken = null;
+        this._tokenMonitor = null;
     }
 
     enable() {
         this._httpSession = new Soup.Session();
         this._cancellable = new Gio.Cancellable(); // NEW: Initialize cancellable
+
+        // NEW: Invalidate the cached token whenever token.txt changes
+        const tokenFile = Gio.File.new_for_path(`${this.path}/token.txt`);
+        this._tokenMonitor = tokenFile.monitor_file(Gio.FileMonitorFlags.NONE, null);
+        this._tokenMonitor.connect('changed', () => {
+            this._cachedToken = null;
+        });
 
         this._indicator = new SuperProductivityButton();
         Main.panel.addToStatusArea(this.uuid, this._indicator);
@@ -93,6 +104,12 @@ export default class SuperProductivityIndicator extends Extension {
     }
 
     disable() {
+        if (this._tokenMonitor) {
+            this._tokenMonitor.cancel();
+            this._tokenMonitor = null;
+        }
+        this._cachedToken = null;
+
         if (this._pollTimeout) {
             GLib.source_remove(this._pollTimeout);
             this._pollTimeout = null;
@@ -125,15 +142,47 @@ export default class SuperProductivityIndicator extends Extension {
         });
     }
 
+    _getToken() {
+        if (this._cachedToken !== null)
+            return this._cachedToken;
+
+        try {
+            const file = Gio.File.new_for_path(`${this.path}/token.txt`);
+            if (file.query_exists(null)) {
+                const [success, contents] = file.load_contents(null);
+                if (success)
+                    this._cachedToken = this._decoder.decode(contents).trim();
+            }
+        } catch (e) {
+            logError(e, 'Super Productivity Extension: Failed to read token.txt');
+        }
+        return this._cachedToken ?? '';
+    }
+
     async _pollStatus() {
+        const apiToken = this._getToken();
+
+        // Hide indicator if no token was created yet
+        if (!apiToken) {
+            this._hideIndicator();
+            return;
+        }
+
+        // Cancel any in-flight request from the previous poll
+        if (this._cancellable) {
+            this._cancellable.cancel();
+        }
+        this._cancellable = new Gio.Cancellable();
+
         try {
             const message = Soup.Message.new('GET', API_URL + '/status');
+            message.request_headers.append('Authorization', `Bearer ${apiToken}`);
 
             const bytes = await new Promise((resolve, reject) => {
                 this._httpSession.send_and_read_async(
                     message,
                     GLib.PRIORITY_DEFAULT,
-                    this._cancellable, // NEW: Pass the cancellable instead of null
+                    this._cancellable,
                     (session, result) => {
                         try {
                             const responseBytes = session.send_and_read_finish(result);
